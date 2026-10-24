@@ -3,7 +3,6 @@ package document
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -46,7 +45,7 @@ func (s *Service) CreateFromText(ctx context.Context, text string) (string, stri
 
 func (s *Service) GetDocument(ctx context.Context, id string) (*Document, error) {
 	if _, err := uuid.Parse(id); err != nil {
-		return nil, fmt.Errorf("parse document id: %w", err)
+		return nil, ErrInvalidID
 	}
 
 	return s.repo.GetDocument(ctx, id)
@@ -54,7 +53,7 @@ func (s *Service) GetDocument(ctx context.Context, id string) (*Document, error)
 
 func (s *Service) GetJob(ctx context.Context, id string) (*Job, error) {
 	if _, err := uuid.Parse(id); err != nil {
-		return nil, fmt.Errorf("parse job id: %w", err)
+		return nil, ErrInvalidID
 	}
 
 	return s.repo.GetJob(ctx, id)

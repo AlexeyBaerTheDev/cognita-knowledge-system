@@ -8,8 +8,8 @@ import (
 
 func RegisterRoutes(mux *http.ServeMux, svc *Service) {
 	mux.HandleFunc("POST /api/v1/documents", CreateHandler(svc))
-	mux.HandleFunc("POST /api/v1/documents/{id}", GetDocumentHandler(svc))
-	mux.HandleFunc("POST /api/v1/jobs/{id}", GetJobHandler(svc))
+	mux.HandleFunc("GET /api/v1/documents/{id}", GetDocumentHandler(svc))
+	mux.HandleFunc("GET /api/v1/jobs/{id}", GetJobHandler(svc))
 }
 
 type CreateRequest struct {
