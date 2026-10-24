@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -14,22 +15,30 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-// Creating record in documents
-func (r *Repository) InsertDocuments(ctx context.Context, id, sourceType, content string) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO documents(id, source_type, content, status)
-		VALUES ($1, $2, $3, 'PENDING')
-	`, id, sourceType, content)
+func (r *Repository) CreateDocumentWithJob(ctx context.Context, docId, jobId, content string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin: %v", err)
+	}
+	defer tx.Rollback(ctx)
 
-	return err
-}
+	if _, err := tx.Exec(ctx, `
+	INSERT INTO documents(id, source_type, content)
+	VALUES ($1, $2, $3)`,
+		docId, "text", content); err != nil {
+		return fmt.Errorf("insert document: %w", err)
+	}
 
-// Creating record in processing_jobs table
-func (r *Repository) InsertJobs(ctx context.Context, id, documentId, jobType string) error {
-	_, err := r.pool.Exec(ctx, `
-		INSERT INTO processing_jobs(id, document_id, job_type, status)
-		VALUES ($1, $2, $3, 'PENDING')
-	`, id, documentId, jobType)
+	if _, err := tx.Exec(ctx, `
+	INSERT INTO processing_jobs(id, document_id, job_type)
+	VALUES($1, $2, $3)`,
+		jobId, docId, "ingest"); err != nil {
+		return fmt.Errorf("insert processing_jobs: %w", err)
+	}
 
-	return err
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
 }

@@ -24,21 +24,18 @@ func (s *Service) CreateFromText(ctx context.Context, text string) (string, stri
 	docId := uuid.NewString()
 	jobId := uuid.NewString()
 
-	// save document
-	if err := s.repo.InsertDocuments(ctx, docId, "text", text); err != nil {
-		return "", "", err
-	}
-
-	// save job
-	if err := s.repo.InsertJobs(ctx, jobId, docId, "ingest"); err != nil {
+	if err := s.repo.CreateDocumentWithJob(ctx, docId, jobId, text); err != nil {
 		return "", "", err
 	}
 
 	// push job to queue
-	payload, _ := json.Marshal(map[string]string{
+	payload, err := json.Marshal(map[string]string{
 		"jobId":      jobId,
 		"documentId": docId,
 	})
+	if err != nil {
+		return "", "", err
+	}
 	if err := s.rdb.LPush(ctx, queueName, payload).Err(); err != nil {
 		return "", "", err
 	}

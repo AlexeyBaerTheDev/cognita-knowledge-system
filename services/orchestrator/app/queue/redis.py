@@ -10,9 +10,6 @@ PROCESSING = "jobs:processing"
 
 
 def get_redis_client() -> Redis:
-    # BRPOP blocks on the server for `timeout` seconds. A client-side socket
-    # timeout would fire at the same moment and surface as a spurious
-    # TimeoutError instead of the empty response. Let the server decide.
     return aioredis.from_url(
         get_redis_url(),
         decode_responses=True,
