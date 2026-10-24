@@ -2,11 +2,14 @@ package document
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
 func RegisterRoutes(mux *http.ServeMux, svc *Service) {
-	mux.HandleFunc("POST /api/v1/document", CreateHandler(svc))
+	mux.HandleFunc("POST /api/v1/documents", CreateHandler(svc))
+	mux.HandleFunc("POST /api/v1/documents/{id}", GetDocumentHandler(svc))
+	mux.HandleFunc("POST /api/v1/jobs/{id}", GetJobHandler(svc))
 }
 
 type CreateRequest struct {
@@ -45,4 +48,45 @@ func CreateHandler(svc *Service) http.HandlerFunc {
 			Status:     "PENDING",
 		})
 	}
+}
+
+func GetDocumentHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		doc, err := svc.GetDocument(r.Context(), r.PathValue("id"))
+		switch {
+		case errors.Is(err, ErrInvalidID):
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "document not found", http.StatusNotFound)
+			return
+		case err != nil:
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-type", "application/json")
+		json.NewEncoder(w).Encode(doc)
+	}
+}
+
+func GetJobHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		job, err := svc.GetJob(r.Context(), r.PathValue("id"))
+		switch {
+		case errors.Is(err, ErrInvalidID):
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		case errors.Is(err, ErrNotFound):
+			http.Error(w, "job not found", http.StatusNotFound)
+			return
+		case err != nil:
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-type", "application/json")
+		json.NewEncoder(w).Encode(job)
+	}
+
 }
