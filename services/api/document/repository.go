@@ -2,8 +2,10 @@ package document
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -41,4 +43,60 @@ func (r *Repository) CreateDocumentWithJob(ctx context.Context, docId, jobId, co
 	}
 
 	return nil
+}
+
+func (r *Repository) GetDocument(ctx context.Context, docId string) (*Document, error) {
+	const query = `
+	SELECT id::text AS id, source_type, COALESCE(content, '') AS content, status, created_at, updated_at
+	FROM documents
+	WHERE id = $1::uuid;`
+
+	rows, err := r.pool.Query(ctx, query, docId)
+	if err != nil {
+		return nil, fmt.Errorf("query document: %w", err)
+	}
+
+	doc, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[Document])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("scan document: %w", err)
+	}
+
+	return &doc, nil
+}
+
+func (r *Repository) GetJob(ctx context.Context, jobId string) (*Job, error) {
+	const query = `
+	SELECT id::text AS id,
+		       document_id::text AS document_id,
+		       job_type,
+		       status,
+		       current_step,
+		       COALESCE(progress, 0) AS progress,
+		       error_message,
+		       attempts,
+		       max_attempts,
+			   next_attempt_at,
+		       created_at,
+		       started_at,
+		       finished_at
+	FROM processing_jobs
+	WHERE id = $1::uuid`
+
+	rows, err := r.pool.Query(ctx, query, jobId)
+	if err != nil {
+		return nil, fmt.Errorf("query job: %w", err)
+	}
+
+	job, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[Job])
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("scan job: %w", err)
+	}
+
+	return &job, nil
 }
