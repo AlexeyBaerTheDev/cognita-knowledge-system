@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 import httpx
 import traceback
 from app.queue.redis import get_redis_client, ping, close
@@ -31,7 +31,7 @@ class SearchRequest(BaseModel):
     limit: int = 5
 
 @app.post("/search")
-async def search(req: SearchRequest):
+async def search(req: SearchRequest, request: Request):
     query = req.query.strip()
     if not query:
         raise HTTPException(400, "query is required")
@@ -39,9 +39,9 @@ async def search(req: SearchRequest):
         raise HTTPException(400, "limit must be between 1 and 20")
 
     vectors = await embed([query])
-    rows = await search_chunks
+    rows = await search_chunks(request.app.state.pool, vectors[0], req.limit)
 
-    return {"search": [
+    return {"results": [
         {
             "documentId": row["document_id"],
             "chunkIndex": row["chunk_index"],
