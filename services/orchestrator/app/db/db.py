@@ -1,52 +1,106 @@
 import asyncpg
 from pgvector.asyncpg import register_vector
 
+
 async def create_pool(dsn: str) -> asyncpg.Pool:
     async def init(conn):
         await register_vector(conn)
     return await asyncpg.create_pool(dsn, init=init, min_size=1, max_size=10)
 
+
 async def set_document_status(pool: asyncpg.Pool, doc_id: str, status: str) -> None:
     await pool.execute(
-        """UPDATE documents SET status=$2, updated_at=now() WHERE id=$1::uuid""",
+        """
+        UPDATE documents 
+        SET status=$2, 
+            updated_at=now() 
+        WHERE id=$1::uuid
+        """,
        doc_id, status,
     )
 
+
 async def set_job_running(pool: asyncpg.Pool, job_id: str) -> None:
     await pool.execute(
-        """UPDATE processing_jobs SET status='RUNNING', current_step='started', progress=0, error_message=NULL, started_at=now(), finished_at=NULL WHERE id=$1::uuid""",
+        """
+        UPDATE processing_jobs 
+        SET status='RUNNING', 
+            current_step='started', 
+            progress=0, error_message=NULL, 
+            started_at=now(), 
+            finished_at=NULL 
+        WHERE id=$1::uuid
+        """,
         job_id
     )
 
+
 async def set_job_progress(pool: asyncpg.Pool, job_id: str, step: str, progress: int) -> None:
     await pool.execute(
-        "UPDATE processing_jobs SET current_step=$2, progress=$3 WHERE id=$1::uuid",
+        """
+        UPDATE processing_jobs 
+        SET current_step=$2, 
+            progress=$3 
+        WHERE id=$1::uuid
+        """,
         job_id, step, progress,
     )
 
+
 async def set_job_done(pool: asyncpg.Pool, job_id: str) -> None:
     await pool.execute(
-        """UPDATE processing_jobs SET status='SUCCEEDED', current_step='done', progress=100, error_message=NULL, finished_at=now() WHERE id=$1::uuid""",
+        """
+        UPDATE processing_jobs 
+        SET status='SUCCEEDED', 
+            current_step='done', 
+            progress=100, 
+            error_message=NULL, 
+            finished_at=now() 
+        WHERE id=$1::uuid
+        """,
         job_id,
     )
+
 
 async def set_job_failed(pool: asyncpg.Pool, job_id: str, err: Exception) -> None:
     await pool.execute(
-        "UPDATE processing_jobs SET status='FAILED', error_message=$2, current_step='FAILED', finished_at=now() WHERE id=$1::uuid",
+        """
+        UPDATE processing_jobs 
+        SET status='FAILED', 
+            error_message=$2, 
+            current_step='FAILED', 
+            finished_at=now() 
+        WHERE id=$1::uuid
+        """,
         job_id, str(err)[:1000],
     )
 
+
 async def fetch_document(pool: asyncpg.Pool, doc_id: str) -> asyncpg.Record | None:
     return await pool.fetchrow(
-        "SELECT source_type, content, storage_path FROM documents WHERE id=$1::uuid",
+        """
+        SELECT source_type, 
+               content, 
+               storage_path 
+        FROM documents 
+        WHERE id=$1::uuid
+        """,
         doc_id,
     )
 
+
 async def fetch_job(pool: asyncpg.Pool, job_id: str) -> asyncpg.Record | None:
     return await pool.fetchrow(
-        "SELECT id, document_id, status FROM processing_jobs WHERE id=$1::uuid",
+        """
+        SELECT id, 
+               document_id, 
+               status 
+        FROM processing_jobs 
+        WHERE id=$1::uuid
+        """,
         job_id,
     )
+
 
 async def replace_chunks(
     pool: asyncpg.Pool,
@@ -73,3 +127,21 @@ async def replace_chunks(
                     for c, v in zip(chunks, vectors)
                 ],
             )
+
+
+async def search_chunks(pool, vector, limit):
+    return await pool.fetch(
+        """
+        SELECT c.document_id::text AS document_id,
+               c.chunk_index,
+               c.content,
+               1 - (c.embedding <=> $1) AS score
+        FROM document_chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE c.embedding IS NOT NULL
+          AND d.status = 'READY'
+        ORDER BY c.embedding <=> $1
+        LIMIT $2
+        """,
+        vector, limit,
+    )
