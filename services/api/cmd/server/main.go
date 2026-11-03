@@ -4,6 +4,7 @@ import (
 	"api/db"
 	"api/document"
 	"api/queue"
+	"api/search"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,11 +37,19 @@ func main() {
 		port = "8080"
 	}
 
+	orchestratorURL := os.Getenv("ORCHESTRATOR_URL")
+	if orchestratorURL == "" {
+		orchestratorURL = "http://orchestrator:8000"
+	}
+
 	mux := http.NewServeMux()
 
 	repo := document.NewRepository(pool)
 	svc := document.NewService(repo, rdb)
 	document.RegisterRoutes(mux, svc)
+
+	searchClient := search.NewClient(orchestratorURL, nil)
+	search.RegisterRoutes(mux, searchClient)
 
 	// Liveness
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
