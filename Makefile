@@ -78,12 +78,13 @@ test: ## Run tests
 
 # ====== Api ======
 
-run-server: ## Run api server locally (Postgres/Redis on localhost)
+run-server: ## Run api server locally (Postgres/Redis/Ollama on localhost)
 	cd services/api && \
 		DATABASE_URL="postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)?sslmode=disable" \
 		REDIS_URL="redis://localhost:6379" \
+		ORCHESTRATOR_URL="http://localhost:8000" \
 		API_PORT=8080 go run ./cmd/server
-
+		
 # ====== Orchestrator ======
 
 activate-venv: ## Activate .venv
