@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from app.ollama import ollama as ollama_module
-from app.ollama.ollama import embed
+from app.ollama.ollama import chat, embed
 
 
 class FakeResponse:
@@ -39,6 +39,12 @@ class FakeClient:
 @pytest.fixture
 def config(monkeypatch):
     monkeypatch.setattr(ollama_module, "get_embedding_model", lambda: "embeddinggemma")
+    monkeypatch.setattr(ollama_module, "get_ollama_url", lambda: "http://ollama:11434")
+
+
+@pytest.fixture
+def llm_config(monkeypatch):
+    monkeypatch.setattr(ollama_module, "get_llm_model", lambda: "qwen3:8b")
     monkeypatch.setattr(ollama_module, "get_ollama_url", lambda: "http://ollama:11434")
 
 
@@ -141,6 +147,104 @@ async def test_unexpected_response_raises(config, fake_http):
 async def test_invalid_batch_size_raises(config, fake_http):
     with pytest.raises(ValueError, match="batch_size"):
         await embed(["a"], batch_size=0)
+
+
+@pytest.mark.asyncio
+async def test_chat_returns_content_and_sends_expected_request(llm_config, fake_http):
+    messages = [
+        {"role": "system", "content": "Ты помощник."},
+        {"role": "user", "content": "Где сидела кошка?"},
+    ]
+    FakeClient.response_factory = lambda payload: FakeResponse(
+        {"message": {"role": "assistant", "content": "  Кошка на подоконнике.  "}}
+    )
+
+    result = await chat(messages)
+
+    assert result == "Кошка на подоконнике."
+    assert len(FakeClient.calls) == 1
+
+    url, payload = FakeClient.calls[0]
+    assert url == "http://ollama:11434/api/chat"
+    assert payload == {
+        "model": "qwen3:8b",
+        "messages": messages,
+        "stream": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_chat_uses_explicit_model(llm_config, fake_http):
+    FakeClient.response_factory = lambda payload: FakeResponse(
+        {"message": {"role": "assistant", "content": "ok"}}
+    )
+
+    await chat([{"role": "user", "content": "hi"}], model="custom-model")
+
+    _, payload = FakeClient.calls[0]
+    assert payload["model"] == "custom-model"
+
+
+@pytest.mark.asyncio
+async def test_chat_missing_model_raises(monkeypatch, fake_http):
+    monkeypatch.setattr(ollama_module, "get_llm_model", lambda: None)
+    monkeypatch.setattr(ollama_module, "get_ollama_url", lambda: "http://ollama:11434")
+
+    with pytest.raises(RuntimeError, match="llm_model"):
+        await chat([{"role": "user", "content": "hi"}])
+
+
+@pytest.mark.asyncio
+async def test_chat_missing_url_raises(monkeypatch, fake_http):
+    monkeypatch.setattr(ollama_module, "get_llm_model", lambda: "qwen3:8b")
+    monkeypatch.setattr(ollama_module, "get_ollama_url", lambda: None)
+
+    with pytest.raises(ValueError, match="ollama_url"):
+        await chat([{"role": "user", "content": "hi"}])
+
+
+@pytest.mark.asyncio
+async def test_chat_empty_messages_raises(llm_config, fake_http):
+    with pytest.raises(ValueError, match="messages"):
+        await chat([])
+
+
+@pytest.mark.asyncio
+async def test_chat_http_error_propagates(llm_config, fake_http):
+    request = httpx.Request("POST", "http://ollama:11434/api/chat")
+    response = httpx.Response(500, request=request)
+    error = httpx.HTTPStatusError("500", request=request, response=response)
+
+    FakeClient.response_factory = lambda payload: FakeResponse({}, error=error)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await chat([{"role": "user", "content": "hi"}])
+
+
+@pytest.mark.asyncio
+async def test_chat_unexpected_response_raises(llm_config, fake_http):
+    FakeClient.response_factory = lambda payload: FakeResponse({"foo": "bar"})
+
+    with pytest.raises(ValueError, match="unexpected ollama response"):
+        await chat([{"role": "user", "content": "hi"}])
+
+
+@pytest.mark.asyncio
+async def test_chat_non_dict_response_raises(llm_config, fake_http):
+    FakeClient.response_factory = lambda payload: FakeResponse([])
+
+    with pytest.raises(ValueError, match="unexpected ollama response"):
+        await chat([{"role": "user", "content": "hi"}])
+
+
+@pytest.mark.asyncio
+async def test_chat_empty_content_raises(llm_config, fake_http):
+    FakeClient.response_factory = lambda payload: FakeResponse(
+        {"message": {"role": "assistant", "content": "   "}}
+    )
+
+    with pytest.raises(ValueError, match="unexpected ollama response"):
+        await chat([{"role": "user", "content": "hi"}])
 
 
 @pytest.mark.integration

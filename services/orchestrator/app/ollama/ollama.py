@@ -1,9 +1,10 @@
 import httpx
 
-from app.config.config import get_ollama_url, get_embedding_model
+from app.config.config import get_ollama_url, get_embedding_model, get_llm_model
 
 EMBED_TIMEOUT = 60.0
 BATCH_SIZE = 32
+LLM_TIMEOUT = 120.0
 
 async def embed(texts: list[str], batch_size: int = BATCH_SIZE) -> list[list[float]]:
     if not texts:
@@ -45,3 +46,45 @@ async def embed(texts: list[str], batch_size: int = BATCH_SIZE) -> list[list[flo
             vectors.extend(embeddings)
 
     return vectors
+
+async def chat(
+    messages: list[dict[str, str]],
+    model: str | None = None,
+) -> str:
+    if not messages:
+        raise ValueError("messages must not be empty")
+
+    model = model or get_llm_model()
+    if not model:
+        raise RuntimeError("llm_model is not set")
+
+    base_url = get_ollama_url()
+    if not base_url:
+        raise ValueError("ollama_url is not set")
+
+    url = f"{base_url.rstrip('/')}/api/chat"
+
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+        response = await client.post(
+            url,
+            json={
+                "model": model,
+                "messages": messages,
+                "stream": False,
+            },
+        )
+        response.raise_for_status()
+        data = response.json()
+
+    if not isinstance(data, dict):
+        raise ValueError(f"unexpected ollama response: {data}")
+
+    message = data.get("message")
+    if not isinstance(message, dict):
+        raise ValueError(f"unexpected ollama response: {data}")
+
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError(f"unexpected ollama response: {data}")
+
+    return content.strip()
