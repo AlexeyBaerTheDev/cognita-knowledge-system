@@ -47,37 +47,30 @@ async def embed(texts: list[str], batch_size: int = BATCH_SIZE) -> list[list[flo
 
     return vectors
 
-async def chat(
-    messages: list[dict[str, str]],
-    model: str | None = None,
-) -> str:
-    if not messages:
-        raise ValueError("messages must not be empty")
+async def chat(messages: list[dict[str, str]], model: str | None = None,) -> str:
+    ollama_llm_model = get_llm_model()
+    ollama_url = get_ollama_url()
 
-    model = model or get_llm_model()
-    if not model:
+    if not ollama_llm_model:
         raise RuntimeError("llm_model is not set")
-
-    base_url = get_ollama_url()
-    if not base_url:
+    if not ollama_url:
         raise ValueError("ollama_url is not set")
+    if not messages:
+        raise ValueError("messages is empty")
 
-    url = f"{base_url.rstrip('/')}/api/chat"
+    url = f"{ollama_url.rstrip('/')}/api/chat"
 
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
         response = await client.post(
             url,
-            json={
-                "model": model,
+            json = {
+                "model":    model or ollama_llm_model,
                 "messages": messages,
-                "stream": False,
+                "stream":   False,
             },
         )
         response.raise_for_status()
         data = response.json()
-
-    if not isinstance(data, dict):
-        raise ValueError(f"unexpected ollama response: {data}")
 
     message = data.get("message")
     if not isinstance(message, dict):

@@ -10,6 +10,7 @@ from app.db.db import (
 from app.ollama.ollama import embed
 from pydantic import BaseModel
 import app.config.config as config
+from app.rag.rag import answer_question
 
 @asynccontextmanager
 async def lifespan(app):
@@ -29,6 +30,10 @@ def health():
 class SearchRequest(BaseModel):
     query: str
     limit: int = 5
+
+class AskRequest(BaseModel):
+    question: str
+    limit:    int = 5
 
 @app.post("/search")
 async def search(req: SearchRequest, request: Request):
@@ -82,3 +87,14 @@ async def ready():
     return {
         "status": "ready" if all_ok else "not ready", "checks": checks
     }
+
+@app.post("/ask")
+async def ask(req: AskRequest, request: Request):
+    try:
+        return await answer_question(
+            request.app.state.pool,
+            req.question,
+            req.limit,
+        )
+    except ValueError as ex:
+        raise HTTPException(400, str(ex)) from ex

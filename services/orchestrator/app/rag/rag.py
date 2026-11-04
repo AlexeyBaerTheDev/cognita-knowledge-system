@@ -52,10 +52,10 @@ async def answer_question(pool, question: str, limit: int = 5) -> dict:
         raise ValueError("limit must be between 1 and 20")
 
     vectors = await embed([question])
+    rows = await search_chunks(pool, vectors[0], limit)
+
     if not vectors:
         raise RuntimeError("embedding returned no vectors")
-
-    rows = await search_chunks(pool, vectors[0], limit)
 
     sources = [
         {
