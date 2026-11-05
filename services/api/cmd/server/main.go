@@ -1,6 +1,7 @@
 package main
 
 import (
+	"api/ask"
 	"api/db"
 	"api/document"
 	"api/queue"
@@ -51,6 +52,9 @@ func main() {
 	searchClient := search.NewClient(orchestratorURL, nil)
 	search.RegisterRoutes(mux, searchClient)
 
+	askClient := ask.NewClient(orchestratorURL, nil)
+	ask.RegisterRoutes(mux, askClient)
+
 	// Liveness
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-type", "text/plain")
@@ -77,7 +81,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
+		WriteTimeout: 180 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
