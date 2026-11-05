@@ -72,6 +72,9 @@ async def chat(messages: list[dict[str, str]], model: str | None = None,) -> str
         response.raise_for_status()
         data = response.json()
 
+    if not isinstance(data, dict):
+        raise ValueError(f"unexpected ollama response: {data}")
+
     message = data.get("message")
     if not isinstance(message, dict):
         raise ValueError(f"unexpected ollama response: {data}")
